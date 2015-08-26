@@ -1,6 +1,5 @@
-#!@@PERL@@
-# -*- cperl -*-
-# vim: ft=perl
+#!/usr/bin/perl
+# -*- perl -*-
 #
 # Copyright (C) 2010 Magnus Hagander, Redpill Linpro AB
 #
@@ -85,8 +84,8 @@ if (defined $ARGV[0] && $ARGV[0] ne '') {
 }
 
 # Process!
-unless ($0 =~ /postgres_streaming_([^:]+):([^:]+)$/) {
-    print "Invalid link: $0. Must be postgres_streaming_<master>:<slave>\n";
+unless ($0 =~ /postgres_lag_([^:]+):([^:]+)$/) {
+    print "Invalid link: $0. Must be postgres_lag_<master>:<slave>\n";
     exit(2);
 }
 my $master = $1;
@@ -102,7 +101,7 @@ my $lag = $dbslave->selectall_arrayref("SELECT CASE WHEN pg_last_xlog_receive_lo
 $dbmaster->disconnect();
 $dbslave->disconnect();
 
-if (!$slavedata->[0]->[0] || $masterdata->[0]->[0] != $slavedata->[0]->[0]) {
+if (!CalculateNumericalOffset($slavedata->[0]->[0]) || CalculateNumericalOffset($masterdata->[0]->[0]) != CalculateNumericalOffset($slavedata->[0]->[0])) {
     print "apply.value -1\n";
 } else {
     my $lagNum = $lag->[0]->[0];
@@ -111,3 +110,13 @@ if (!$slavedata->[0]->[0] || $masterdata->[0]->[0] != $slavedata->[0]->[0]) {
 
 exit(0);
 
+sub CalculateNumericalOffset
+{
+    my $stringofs = shift;
+
+    my @pieces = split /\//, $stringofs;
+    die "Invalid offset: $stringofs" unless ($#pieces == 1);
+
+    # First part is logid, second part is record offset
+    return (hex("ffffffff") * hex($pieces[0])) + hex($pieces[1]);
+}
