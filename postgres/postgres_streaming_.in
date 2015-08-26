@@ -67,17 +67,14 @@ if (defined $ARGV[0] && $ARGV[0] ne '') {
     }
     elsif ($ARGV[0] eq 'config') {
         print "graph_title PostgreSQL replication lag\n";
-        print "graph_vlabel Lag (kb xlog)\n";
+        print "graph_vlabel Lag (seconds)\n";
         print "graph_category PostgreSQL\n";
         print "graph_info PostgreSQL streaming replication lag\n";
-        print "graph_args --base 1024\n";
-        print "receive.label Receive delay\n";
-        print "receive.type GAUGE\n";
-        print "receive.draw LINE1\n";
-        print "receive.min 0\n";
+        print "graph_args --lower-limit -1 --logarithmic\n";
         print "apply.label Apply delay\n";
         print "apply.type GAUGE\n";
         print "apply.draw LINE1\n";
+        print "apply.critical 0:15";
         print "apply.min 0\n";
         exit(0);
     }
@@ -100,27 +97,17 @@ my $dbslave  = DBI->connect("DBI:Pg:service=$slave")  or die "Could not connect 
 
 my $masterdata = $dbmaster->selectall_arrayref("SELECT pg_current_xlog_location()") or die "Could not query for xlog location on master\n";
 my $slavedata = $dbslave->selectall_arrayref("SELECT pg_last_xlog_receive_location(), pg_last_xlog_replay_location()\n") or die "Could not query for xlog locations on slave\n";
+my $lag = $dbslave->selectall_arrayref("SELECT CASE WHEN pg_last_xlog_receive_location() = pg_last_xlog_replay_location() THEN 0 ELSE EXTRACT (EPOCH FROM now() - pg_last_xact_replay_timestamp()) END AS log_delay;\n") or die "Could not query for xlog locations on slave\n";
 
 $dbmaster->disconnect();
 $dbslave->disconnect();
 
-my $master_num    = CalculateNumericalOffset($masterdata->[0]->[0]);
-my $receive_delay = ($master_num - CalculateNumericalOffset($slavedata->[0]->[0]));
-my $replay_delay  = ($master_num - CalculateNumericalOffset($slavedata->[0]->[1]));
-
-print "receive.value $receive_delay\n";
-print "apply.value $replay_delay\n";
+if (!$slavedata->[0]->[0] || $masterdata->[0]->[0] != $slavedata->[0]->[0]) {
+    print "apply.value -1\n";
+} else {
+    my $lagNum = $lag->[0]->[0];
+    print "apply.value $lagNum\n";
+}
 
 exit(0);
 
-
-sub CalculateNumericalOffset
-{
-    my $stringofs = shift;
-
-    my @pieces = split /\//, $stringofs;
-    die "Invalid offset: $stringofs" unless ($#pieces == 1);
-
-    # First part is logid, second part is record offset
-    return (hex("ffffffff") * hex($pieces[0])) + hex($pieces[1]);
-}
