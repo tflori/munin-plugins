@@ -101,7 +101,7 @@ my $lag = $dbslave->selectall_arrayref("SELECT CASE WHEN pg_last_xlog_receive_lo
 $dbmaster->disconnect();
 $dbslave->disconnect();
 
-if (!CalculateNumericalOffset($slavedata->[0]->[0]) || CalculateNumericalOffset($masterdata->[0]->[0]) != CalculateNumericalOffset($slavedata->[0]->[0])) {
+if (!CalculateNumericalOffset($slavedata->[0]->[0]) || CalculateNumericalOffset($masterdata->[0]->[0]) > CalculateNumericalOffset($slavedata->[0]->[0])) {
     print "apply.value -1\n";
 } else {
     my $lagNum = $lag->[0]->[0];
